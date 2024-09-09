@@ -127,7 +127,7 @@ for subject_number in subject_numbers:
         train_labels, val_labels = labels[train_index, :], labels[val_index, :]
         
         # Create EEGNet model
-        model = DeepConvNet(nb_classes=2, Chans=chans, Samples=samples,
+        model = ShallowConvNet(nb_classes=2, Chans=chans, Samples=samples,
                        dropoutRate=0.5)
         
         # Compile the model
