@@ -10,3 +10,11 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 - GCN (Personally developed, custom architecture)
 - GCN (Personally developed, custom architecture)
 - GAT (Personally developed, custom architecture)
+
+## Results
+
+
+## To Be Done:
+- Prepare and Include the EfficientNet Implementations
+- Publish ALS Dataset for open access and reproducibility
+- 
