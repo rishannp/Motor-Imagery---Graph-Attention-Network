@@ -154,7 +154,7 @@ for subject_number in subject_numbers:
         
         # Model checkpoint and early stopping
         checkpointer = ModelCheckpoint(filepath='/tmp/checkpoint.keras', verbose=1, save_best_only=True)
-        early_stopping = EarlyStopping(monitor='val_accuracy', patience=10, verbose=1, restore_best_weights=True)
+        early_stopping = EarlyStopping(monitor='val_accuracy', patience=50, verbose=1, restore_best_weights=True)
         
         # Train the model
         fittedModel = model.fit(train_data, train_labels, batch_size=32, epochs=250,
