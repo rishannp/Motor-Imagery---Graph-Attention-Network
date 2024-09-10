@@ -139,7 +139,7 @@ for subject_number in subject_numbers:
     # Perform k-fold cross-validation
 
     # Define the learning rate and other hyperparameters
-    initial_learning_rate = 0.001
+    initial_learning_rate = 0.0001
     #learning_rate_schedule = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6)
         
     # Perform k-fold cross-validation

@@ -104,7 +104,7 @@ fs = 256
 idx = ['L', 'R']
 # Initialize dictionary to store best accuracies
 accuracies = {}
-subject_data = {}
+
 
 # Define k-fold cross-validation
 k = 10  # Number of folds
@@ -112,6 +112,7 @@ kf = KFold(n_splits=k, shuffle=False)
 
 # Iterate over each subject
 for subject_number in subject_numbers:
+    subject_data = {}
     mat_fname = pjoin(data_dir, f'OGFS{subject_number}.mat')
     mat_contents = sio.loadmat(mat_fname)
     subject_data[f'S{subject_number}'] = mat_contents[f'Subject{subject_number}'][:,:-1]
@@ -139,7 +140,7 @@ for subject_number in subject_numbers:
     # Perform k-fold cross-validation
 
     # Define the learning rate and other hyperparameters
-    initial_learning_rate = 0.001
+    initial_learning_rate = 0.0001
     #learning_rate_schedule = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6)
         
     # Perform k-fold cross-validation

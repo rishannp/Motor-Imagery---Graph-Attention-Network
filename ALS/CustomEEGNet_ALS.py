@@ -6,23 +6,30 @@ import numpy as np
 import scipy.io as sio
 from os.path import join as pjoin
 from sklearn.model_selection import KFold
+import scipy.signal as sig
 
 
-def aggregate_eeg_data(S1, chunk_size=256):
+def bandpass(data: np.ndarray, edges: list[float], sample_rate: float, poles: int = 5):
+    sos = sig.butter(poles, edges, 'bandpass', fs=sample_rate, output='sos')
+    filtered_data = sig.sosfiltfilt(sos, data,axis=0)
+    return filtered_data
+
+def aggregate_eeg_data(S1, chunk_size=1024):
     """
-    Aggregate EEG data by splitting each trial into chunks of fixed size and discarding any remainder,
-    merging 'L' and 'R' chunks sequentially.
+    Aggregate EEG data by selecting the middle chunk of fixed size from each trial and 
+    merging 'L' and 'R' trials sequentially.
 
     Parameters:
         S1 (dict): Dictionary containing EEG data for each class. Keys are class labels,
                    values are arrays of shape (2, num_samples, num_channels), where the first dimension
                    corresponds to EEG data (index 0) and frequency data (index 1).
-        chunk_size (int): The size of each chunk to which the data will be split.
+        chunk_size (int): The size of each chunk to be extracted from the middle of the trial.
 
     Returns:
-        data (ndarray): Aggregated EEG data with shape (chunk_size, numElectrodes, num_trials * num_chunks_per_trial).
-        labels (ndarray): Labels for each chunk with shape (num_trials * num_chunks_per_trial,)
-                          where 1 represents 'L' and 2 represents 'R'.
+        data (ndarray): Aggregated EEG data with shape (num_trials * 2, chunk_size, numElectrodes),
+                        where 2 represents the 'L' and 'R' classes.
+        labels (ndarray): Labels for each chunk with shape (num_trials * 2,)
+                          where 0 represents 'L' and 1 represents 'R'.
     """
     numElectrodes = S1['L'][0, 1].shape[1]
 
@@ -30,31 +37,35 @@ def aggregate_eeg_data(S1, chunk_size=256):
     data_list = []
     labels_list = []
 
-    # Loop through each trial and interleave L and R trials
+    # Loop through each trial and select the middle chunk of 'L' and 'R' trials
     for i in range(S1['L'].shape[1]):
         # Process 'L' trial
         l_trial = S1['L'][0, i]
         l_num_samples = l_trial.shape[0]
-        l_num_chunks = l_num_samples // chunk_size
-        
-        for j in range(l_num_chunks):
-            chunk = l_trial[j * chunk_size:(j + 1) * chunk_size, :]
-            data_list.append(chunk)
+
+        if l_num_samples >= chunk_size:
+            # Calculate the start and end indices for the middle chunk
+            l_start = (l_num_samples - chunk_size) // 2
+            l_end = l_start + chunk_size
+            l_middle_chunk = l_trial[l_start:l_end, :]  # Select the middle chunk
+            data_list.append(l_middle_chunk)
             labels_list.append(0)  # Label for 'L'
 
         # Process 'R' trial
         r_trial = S1['R'][0, i]
         r_num_samples = r_trial.shape[0]
-        r_num_chunks = r_num_samples // chunk_size
-        
-        for j in range(r_num_chunks):
-            chunk = r_trial[j * chunk_size:(j + 1) * chunk_size, :]
-            data_list.append(chunk)
+
+        if r_num_samples >= chunk_size:
+            # Calculate the start and end indices for the middle chunk
+            r_start = (r_num_samples - chunk_size) // 2
+            r_end = r_start + chunk_size
+            r_middle_chunk = r_trial[r_start:r_end, :]  # Select the middle chunk
+            data_list.append(r_middle_chunk)
             labels_list.append(1)  # Label for 'R'
 
     # Convert lists to numpy arrays
-    data = np.stack(data_list, axis=0)  # Shape: (num_chunks_per_trial * num_trials * 2, chunk_size, numElectrodes)
-    labels = np.array(labels_list)      # Shape: (num_chunks_per_trial * num_trials * 2,)
+    data = np.stack(data_list, axis=0)  # Shape: (num_trials * 2, chunk_size, numElectrodes)
+    labels = np.array(labels_list)      # Shape: (num_trials * 2,)
 
     return data, labels
 
@@ -284,7 +295,7 @@ for subject_number in subject_numbers:
         
         # Train the model
         print(f'Training for Subject {subject_number}, Fold {fold+1}...')
-        train(model, train_dataloader, criterion, optimizer, num_epochs=10)
+        train(model, train_dataloader, criterion, optimizer, num_epochs=250)
         
         # Evaluate the model
         print(f'Evaluating for Subject {subject_number}, Fold {fold+1}...')
@@ -297,7 +308,6 @@ for subject_number in subject_numbers:
 # Save all accuracies to file
 save_best_accuracies(accuracies)
 
-#%%
 
 def print_mean_min_max_accuracies(accuracies):
     # Iterate through each subject in the accuracies dictionary
