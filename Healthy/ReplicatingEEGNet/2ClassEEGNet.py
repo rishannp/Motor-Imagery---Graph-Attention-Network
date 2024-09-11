@@ -196,7 +196,7 @@ def save_best_accuracies(best_accuracies, save_path='lawhernEEGNetHealthy.npy'):
 
 # Get the current working directory
 current_dir = os.getcwd()
-save_path = os.path.join(current_dir, '4ClassEEGNet.npy')
+save_path = os.path.join(current_dir, '2ClassEEGNet.npy')
 save_best_accuracies(accuracies, save_path=save_path)
 
 print(f"Accuracies saved to {save_path}")
