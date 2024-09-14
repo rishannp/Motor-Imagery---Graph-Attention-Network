@@ -17,6 +17,11 @@ import mne
 from mne import io
 import os
 import scipy.signal as sig
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from mne.decoding import CSP
+
 
 # EEGNet-specific imports
 from EEGModels import EEGNet, ShallowConvNet, DeepConvNet
@@ -37,8 +42,6 @@ subjects = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 event_id = {
     'left_hand': 7,   # LH
     'right_hand': 8,  # RH
-    'feet': 9,        # Feet
-    'tongue': 10       # Tongue
 }
 
 # Reverse mapping from event IDs to labels
@@ -76,7 +79,7 @@ for subject in subjects:
         raw = raw.copy().set_eog_proj(True)
         raw.apply_proj()
     
-    # Remove the last three channels 
+    # Remove the last three channels (assumed EOG channels)
     all_channel_names = raw.info['ch_names']
     eog_channel_names = all_channel_names[-3:]  # Get the names of the last three channels
     raw.drop_channels(eog_channel_names)
@@ -124,86 +127,48 @@ for subject_number in subject_numbers:
     S1 = subject_data[f'S{subject_number}']
     data = S1['data']
     labels = S1['labels']
-    
-    fs = 250
-    
-    trials = data.shape[0]
-    chans = data.shape[1]
-    samples = data.shape[2]
-    kernels = 1
-    
-    data = data.reshape(trials, chans, samples, kernels)  # N x C x T X K ## np.newaxis
-    labels = labels.reshape(-1, 1)
-    labels = OneHotEncoder(sparse_output=False).fit_transform(labels)
+
+    # No need to reshape data for CSP, but ensure labels are correctly formatted
+    labels = labels.flatten()  # Ensure labels are 1D for scikit-learn
     
     # Initialize list to store accuracies for each fold
     fold_accuracies = []
     
     # Perform k-fold cross-validation
-
-    # Define the learning rate and other hyperparameters
-    initial_learning_rate = 0.01
-    #learning_rate_schedule = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6)
-        
-    # Perform k-fold cross-validation
     for fold, (train_index, val_index) in enumerate(kf.split(data)):
-        train_data, val_data = data[train_index, :, :, :], data[val_index, :, :, :]
-        train_labels, val_labels = labels[train_index, :], labels[val_index, :]
+        train_data, val_data = data[train_index], data[val_index]
+        train_labels, val_labels = labels[train_index], labels[val_index]
     
-        # Create EEGNet model
-        model = EEGNet(nb_classes=4, Chans=chans, Samples=samples,
-                       dropoutRate=0.5, kernLength=64, F1=8, D=2, F2=16,
-                       dropoutType='Dropout')
+        # Create a CSP pipeline with LDA classifier
+        csp = CSP(n_components=10, reg=None, log=True, norm_trace=False)
+        clf = make_pipeline(csp, LDA())
         
-        # Compile the model with a lower learning rate
-        optimizer = Adam(learning_rate=initial_learning_rate)
-        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+        # Train the pipeline (CSP + LDA)
+        clf.fit(train_data, train_labels)
         
-        # Model checkpoint and early stopping
-        checkpointer = ModelCheckpoint(filepath='/tmp/checkpoint.keras', verbose=1, save_best_only=True)
-        early_stopping = EarlyStopping(monitor='val_accuracy', patience=100, verbose=1, restore_best_weights=True)
+        # Evaluate the classifier on the validation set
+        val_score = clf.score(val_data, val_labels)
         
-        # Train the model
-        fittedModel = model.fit(train_data, train_labels, batch_size=32, epochs=250,
-                                verbose=2, callbacks=[checkpointer, early_stopping],
-                                validation_data=(val_data, val_labels))
-        
-        # Evaluate the model on the validation set
-        probs = model.predict(val_data)
-        preds = probs.argmax(axis=-1)
-        acc = np.mean(preds == val_labels.argmax(axis=-1))
-        print(f"Subject: S{subject_number}, Classification accuracy for fold {fold + 1}: {acc}")
-        
-        # Track the best validation accuracy for the fold
-        best_acc = max(fittedModel.history['val_accuracy'])
-        print(f"Subject: S{subject_number}, Best Accuracy for fold {fold + 1}: {best_acc}")
+        print(f"Subject: S{subject_number}, Classification accuracy for fold {fold + 1}: {val_score}")
         
         # Store the fold accuracy
-        fold_accuracies.append(best_acc)
-        
-        # # Plot learning curves for training and validation accuracy
-        # plt.plot(fittedModel.history['accuracy'], label='Training Accuracy')
-        # plt.plot(fittedModel.history['val_accuracy'], label='Validation Accuracy')
-        # plt.title(f'Subject {subject_number}, Fold {fold + 1} - Accuracy')
-        # plt.xlabel('Epochs')
-        # plt.ylabel('Accuracy')
-        # plt.legend()
-        # plt.show()
+        fold_accuracies.append(val_score)
     
     # Store the fold accuracies for this subject
     accuracies[f'Subject_{subject_number}'] = fold_accuracies
 
 # Save the accuracies dictionary in the current directory
-def save_best_accuracies(best_accuracies, save_path='lawhernEEGNetHealthy.npy'):
+def save_best_accuracies(best_accuracies, save_path='CSP_LDA_Accuracies.npy'):
     np.save(save_path, best_accuracies)
 
 # Get the current working directory
 current_dir = os.getcwd()
-save_path = os.path.join(current_dir, '4ClassEEGNet.npy')
+save_path = os.path.join(current_dir, 'CSP_LDA_Accuracies.npy')
 save_best_accuracies(accuracies, save_path=save_path)
 
 print(f"Accuracies saved to {save_path}")
 
+# Function to print mean, min, and max accuracies
 def print_mean_min_max_accuracies(accuracies):
     """
     Prints the mean, minimum, and maximum accuracies for each subject.
@@ -224,5 +189,4 @@ def print_mean_min_max_accuracies(accuracies):
               f'Min Accuracy = {min_accuracy:.4f}, Max Accuracy = {max_accuracy:.4f}')
 
 # Example usage:
-# Call the function to print mean, min, and max accuracies directly to the terminal
 print_mean_min_max_accuracies(accuracies)

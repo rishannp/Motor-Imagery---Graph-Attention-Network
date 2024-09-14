@@ -135,7 +135,7 @@ for subject_number in subject_numbers:
     # Perform k-fold cross-validation
 
     # Define the learning rate and other hyperparameters
-    initial_learning_rate = 0.001
+    initial_learning_rate = 0.00001
     #learning_rate_schedule = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6)
         
     # Perform k-fold cross-validation
@@ -157,8 +157,8 @@ for subject_number in subject_numbers:
         early_stopping = EarlyStopping(monitor='val_accuracy', patience=50, verbose=1, restore_best_weights=True)
         
         # Train the model
-        fittedModel = model.fit(train_data, train_labels, batch_size=32, epochs=250,
-                                verbose=2, callbacks=[checkpointer, early_stopping],
+        fittedModel = model.fit(train_data, train_labels, batch_size=32, epochs=500,
+                                verbose=2, callbacks=[checkpointer],
                                 validation_data=(val_data, val_labels))
         
         # Evaluate the model on the validation set

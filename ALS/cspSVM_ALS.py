@@ -23,6 +23,8 @@ from mne.decoding import CSP
 from sklearn.preprocessing import StandardScaler
 from scipy.signal import butter, filtfilt
 from sklearn.metrics import accuracy_score
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+
 
 #%%%%%%%%%%%% ALS Dataset - CSP %%%%%%%%%%%%%%%%
 
@@ -302,7 +304,9 @@ def train_and_test_csp(train_data, test_data, n_components=10, plot_csp=False):
     X_test_transformed = scaler.transform(X_test_transformed)
     
     # Train a classifier (SVM) with balanced class weights
-    classifier = SVC(class_weight='balanced')
+    #classifier = SVC(class_weight='balanced')
+    #classifier.fit(X_train_transformed, y_train)
+    classifier = LDA()
     classifier.fit(X_train_transformed, y_train)
     
     # Test the classifier
