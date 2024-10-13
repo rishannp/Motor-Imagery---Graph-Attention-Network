@@ -4,7 +4,6 @@ Created on Sat Jan 27 18:26:26 2024
 Rishan Patel, UCL, Bioelectronics Group.
 
 
-
 https://pytorch-geometric.readthedocs.io/en/latest/get_started/introduction.html#data-handling-of-graphs
 https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html#torch_geometric.data.Data
 https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_dataset.html
@@ -34,6 +33,7 @@ from torch_geometric.nn import global_mean_pool
 from torch import nn
 from tqdm import tqdm
 from torch_geometric.data import Data
+import seaborn as sns
  
 #% Functions
 def plvfcn(eegData):
@@ -194,6 +194,8 @@ for subject_number in tqdm(subject_numbers, desc="Processing Subjects"):
     # Compute PLV and Graphs
     plv, y = compute_plv(S1)
     threshold = 0.3
+    heads = 1
+    ep = 250
     graphs = create_graphs(plv, threshold)
     numElectrodes = S1['L'][0, 1].shape[1]
 
@@ -241,115 +243,170 @@ for subject_number in tqdm(subject_numbers, desc="Processing Subjects"):
 
     # KFold Cross-Validation
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
-    highest_test_accuracies = []
-
     
+    highest_test_accuracies = []
+    
+    
+    class GAT(nn.Module):
+        def __init__(self, hidden_channels, heads):
+            super(GAT, self).__init__()
+            
+            # Define GAT convolution layers
+            self.conv1 = GATv2Conv(8, hidden_channels, heads=heads, concat=True)  # num node features
+            self.conv2 = GATv2Conv(hidden_channels * heads, hidden_channels, heads=heads, concat=True)
+            self.conv3 = GATv2Conv(hidden_channels * heads, hidden_channels, heads=heads, concat=True)
+            
+            # Define GraphNorm layers
+            self.gn1 = GraphNorm(hidden_channels * heads)
+            self.gn2 = GraphNorm(hidden_channels * heads)
+            self.gn3 = GraphNorm(hidden_channels * heads)
+            
+            # Define the final linear layer
+            self.lin = nn.Linear(hidden_channels * heads, 2)  # num of classes
+            
+            # Store attention weights from the last layer
+            self.last_attention_weights = None
+    
+        def forward(self, x, edge_index, batch):
+            # Apply first GAT layer
+            x, attn1 = self.conv1(x, edge_index, return_attention_weights=True)
+            x = F.relu(x)
+            x = self.gn1(x, batch)
+            
+            # Apply second GAT layer
+            x, attn2 = self.conv2(x, edge_index, return_attention_weights=True)
+            x = F.relu(x)
+            x = self.gn2(x, batch)
+            
+            # Apply third GAT layer and store attention weights
+            x, attn3 = self.conv3(x, edge_index, return_attention_weights=True)
+            self.last_attention_weights = attn3[1].detach().cpu().numpy()  # Store last layer's attention weights
+            x = self.gn3(x, batch)
+            
+            # Global pooling and classification
+            x = global_mean_pool(x, batch)  # [batch_size, hidden_channels]
+            x = F.dropout(x, p=0.50, training=self.training)
+            x = self.lin(x)
+            
+            return x
+    
+    def train(model, train_loader, optimizer, criterion):
+        model.train()
+        for data in train_loader:
+            out = model(data.x, data.edge_index, data.batch)
+            loss = criterion(out, data.y)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+    
+    def test(model, loader):
+        model.eval()
+        correct = 0
+        for data in loader:
+            out = model(data.x, data.edge_index, data.batch)
+            pred = out.argmax(dim=1)
+            correct += int((pred == data.y).sum())
+        
+        # Store last layer's attention weights
+        attention_weights = model.last_attention_weights
+        model.last_attention_weights = None  # Clear stored attention weights after using them
+        return correct / len(loader.dataset), attention_weights
+    
+    # Function to plot dual heatmaps for training and testing attention scores
+    def plot_dual_attention_heatmaps(train_attention, test_attention, electrode_labels, subject_number, fold):
+        fig, axes = plt.subplots(1, 2, figsize=(16, 8))  # Create a figure with two subplots
+    
+        # Plot for training attention scores
+        axes[0].imshow(train_attention, cmap="Blues", aspect='auto')
+        axes[0].set_title(f'Subject {subject_number} Fold {fold+1} - Training Attention')
+        axes[0].set_xticks(np.arange(len(electrode_labels)))
+        axes[0].set_yticks(np.arange(len(electrode_labels)))
+        axes[0].set_xticklabels(electrode_labels)
+        axes[0].set_yticklabels(electrode_labels)
+        axes[0].set_xlabel("Electrodes")
+        axes[0].set_ylabel("Electrodes")
+        axes[0].colorbar = plt.colorbar(axes[0].imshow(train_attention, cmap="Blues", aspect='auto'), ax=axes[0])
+    
+        # Plot for testing attention scores
+        axes[1].imshow(test_attention, cmap="Blues", aspect='auto')
+        axes[1].set_title(f'Subject {subject_number} Fold {fold+1} - Testing Attention')
+        axes[1].set_xticks(np.arange(len(electrode_labels)))
+        axes[1].set_yticks(np.arange(len(electrode_labels)))
+        axes[1].set_xticklabels(electrode_labels)
+        axes[1].set_yticklabels(electrode_labels)
+        axes[1].set_xlabel("Electrodes")
+        axes[1].set_ylabel("Electrodes")
+        axes[1].colorbar = plt.colorbar(axes[1].imshow(test_attention, cmap="Blues", aspect='auto'), ax=axes[1])
+    
+        plt.tight_layout()
+        plt.show()
+    
+    # Assuming kf and data_list are already defined
     for fold, (train_idx, test_idx) in enumerate(kf.split(data_list)):
-        train = [data_list[i] for i in train_idx]
-        test = [data_list[i] for i in test_idx]
-
+        traindat = [data_list[i] for i in train_idx]
+        testdat = [data_list[i] for i in test_idx]
+    
         torch.manual_seed(12345)
-        train_loader = DataLoader(train, batch_size=32, shuffle=False)
-        test_loader = DataLoader(test, batch_size=32, shuffle=False)
-
-        class GAT(nn.Module):
-            def __init__(self, hidden_channels, heads):
-                super(GAT, self).__init__()
-                
-                # Define GAT convolution layers
-                self.conv1 = GATv2Conv(8, hidden_channels, heads=heads, concat=True)  # num node features
-                self.conv2 = GATv2Conv(hidden_channels * heads, hidden_channels, heads=heads, concat=True)
-                self.conv3 = GATv2Conv(hidden_channels * heads, hidden_channels, heads=heads, concat=True)
-                
-                # Define GraphNorm layers
-                self.gn1 = GraphNorm(hidden_channels * heads)
-                self.gn2 = GraphNorm(hidden_channels * heads)
-                self.gn3 = GraphNorm(hidden_channels * heads)
-                
-                # Define the final linear layer
-                self.lin = nn.Linear(hidden_channels * heads, 2)  # num of classes
-        
-            def forward(self, x, edge_index, batch):
-                # Apply first GAT layer and normalization
-                x = self.conv1(x, edge_index)
-                x = F.relu(x)
-                x = self.gn1(x, batch)  # Apply GraphNorm
-        
-                # Apply second GAT layer and normalization
-                x = self.conv2(x, edge_index)
-                x = F.relu(x)
-                x = self.gn2(x, batch)  # Apply GraphNorm
-        
-                # Apply third GAT layer and normalization
-                x = self.conv3(x, edge_index)
-                x = self.gn3(x, batch)  # Apply GraphNorm
-        
-                # Global pooling
-                x = global_mean_pool(x, batch)  # [batch_size, hidden_channels]
-        
-                # Apply dropout and final classifier
-                x = F.dropout(x, p=0.50, training=self.training)
-                x = self.lin(x)
-        
-                return x
-
-                
-
-        model = GAT(hidden_channels=22,heads=3)
+        train_loader = DataLoader(traindat, batch_size=32, shuffle=False)
+        test_loader = DataLoader(testdat, batch_size=32, shuffle=False)
+    
+        model = GAT(hidden_channels=22, heads=heads)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         criterion = torch.nn.CrossEntropyLoss()
-
-        def train():
-            model.train()
-            for data in train_loader:
-                out = model(data.x, data.edge_index, data.batch)
-                loss = criterion(out, data.y)
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-
-        def test(loader):
-            model.eval()
-            correct = 0
-            for data in loader:
-                out = model(data.x, data.edge_index, data.batch)
-                pred = out.argmax(dim=1)
-                correct += int((pred == data.y).sum())
-            return correct / len(loader.dataset)
-
-        optimal = [0, 0, 0]
-        for epoch in tqdm(range(1, 500), desc=f"Training Epochs for Subject {subject_number} Fold {fold+1}"):
-            train()
-            train_acc = test(train_loader)
-            test_acc = test(test_loader)
+    
+        optimal = [0, 0, 0]  # [average_acc, train_acc, test_acc]
+        best_train_attention = None
+        best_test_attention = None
+    
+        for epoch in tqdm(range(1, ep), desc=f"Training Epochs for Subject {subject_number} Fold {fold+1}"):
+            train(model, train_loader, optimizer, criterion)
+            train_acc, train_attention = test(model, train_loader)
+            test_acc, test_attention = test(model, test_loader)
             av_acc = np.mean([train_acc, test_acc])
+    
+            # Store only if current test accuracy is higher
             if test_acc > optimal[2]:
                 optimal = [av_acc, train_acc, test_acc]
-
-        highest_test_accuracies.append(optimal[2])
-
-    meanhigh = np.mean(highest_test_accuracies)
-    maxhigh = np.max(highest_test_accuracies)
-    minhigh = np.min(highest_test_accuracies)
-
-    # Save the results in the dictionary
-    subject_results[subject_number] = {
-        'mean': meanhigh,
-        'max': maxhigh,
-        'min': minhigh
-    }
-
-    # Print results for the current subject
-    print(f'S{subject_number}: Mean: {meanhigh:.4f}, Max: {maxhigh:.4f}, Min: {minhigh:.4f}')
-
-# Optionally, save the results to a file or print all results at the end
-print("\nSummary of Results for All Subjects:")
-for subject_number, results in subject_results.items():
-    print(f'S{subject_number}: Mean: {results["mean"]:.4f}, Max: {results["max"]:.4f}, Min: {results["min"]:.4f}')
+                best_train_attention = train_attention  # Save best training attention
+                best_test_attention = test_attention   # Save best testing attention
     
-import json 
-
+        highest_test_accuracies.append(optimal[2])
+    
+        # Plot both training and testing attention scores if the best attention data is available
+        if best_train_attention is not None and best_test_attention is not None:
+            # Reshape and process the attention scores
+            trainbatch = best_train_attention.shape[0] // 22 // 22
+            testbatch = best_test_attention.shape[0] // 22 // 22
+            
+            best_train_attention = best_train_attention[:,-1].reshape(22, 22, trainbatch)
+            best_train_attention = np.mean(best_train_attention, axis=2)
+            best_train_attention = best_train_attention[:-3, :-3]  # Remove the last 3 rows/columns
+    
+            best_test_attention = best_test_attention[:,-1].reshape(22, 22, testbatch)
+            best_test_attention = np.mean(best_test_attention, axis=2)
+            best_test_attention = best_test_attention[:-3, :-3]  # Remove the last 3 rows/columns
+    
+            # Plot the dual attention heatmaps
+            plot_dual_attention_heatmaps(best_train_attention, best_test_attention, 
+                                         electrode_labels=["FP1", "FP2", "F7", "F3", "FZ", "F4", "F8", 
+                                                           "T7", "C3", "CZ", "C4", "T8", "P7", "P3", 
+                                                           "PZ", "P4", "P8", "O1", "O2"],
+                                         subject_number=subject_number, fold=fold)
+    
+        # Summarize results for the current subject
+        meanhigh = np.mean(highest_test_accuracies)
+        maxhigh = np.max(highest_test_accuracies)
+        minhigh = np.min(highest_test_accuracies)
+    
+        subject_results[subject_number] = {
+            'mean': meanhigh,
+            'max': maxhigh,
+            'min': minhigh
+        }
+    
+        print(f'S{subject_number}: Mean: {meanhigh:.4f}, Max: {maxhigh:.4f}, Min: {minhigh:.4f}')
+    
 # Save the results to a JSON file
+import json
 with open('ALS_results.json', 'w') as json_file:
     json.dump(subject_results, json_file, indent=4)
-    
