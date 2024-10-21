@@ -5,8 +5,8 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 ## Models Implemented
 - EEGNet (Implementation from Scratch)
 - EEGNet (Originally from V. Lawhern https://github.com/vlawhern/arl-eegmodels)
-- DeepConvNet (Originally from V. Lawhern https://github.com/vlawhern/arl-eegmodels)
-- ShallowConvNet (Originally from V. Lawhern https://github.com/vlawhern/arl-eegmodels)
+- DeepConvNet (Originally from Schirrmeister)
+- ShallowConvNet (Originally from Schirrmeister)
 - GCN
 - GCN 
 - GAT 
