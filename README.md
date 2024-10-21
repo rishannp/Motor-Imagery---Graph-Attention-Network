@@ -15,6 +15,6 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 
 
 ## To Be Done:
-- Prepare and Include the EfficientNet Implementations
+- Add https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8585027 and https://ieeexplore.ieee.org/document/9325918?denied= Implementations
 - Publish ALS Dataset for open access and reproducibility
 - 
