@@ -29,7 +29,7 @@ from sklearn.model_selection import KFold
 from torch_geometric.loader import DataLoader
 from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GATConv, GATv2Conv, GAT, GraphNorm
+from torch_geometric.nn import GCNConv, GATConv, GATv2Conv, GAT, GraphNorm, 
 from torch_geometric.nn import global_mean_pool
 from torch import nn
 from tqdm import tqdm
