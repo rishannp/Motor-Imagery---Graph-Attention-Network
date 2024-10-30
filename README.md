@@ -7,6 +7,8 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 - EEGNet (Originally from V. Lawhern https://github.com/vlawhern/arl-eegmodels)
 - DeepConvNet (Originally from Schirrmeister)
 - ShallowConvNet (Originally from Schirrmeister)
+- WaveletCNN (D.Zhang - 10.1109/ACCESS.2018.2889093)
+- CSPCNN (J.Bang - https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9325918)
 - GCN
 - GCN 
 - GAT 
@@ -15,6 +17,5 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 
 
 ## To Be Done:
-- Add https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8585027 and https://ieeexplore.ieee.org/document/9325918?denied= Implementations
 - Publish ALS Dataset for open access and reproducibility
-- 
+
