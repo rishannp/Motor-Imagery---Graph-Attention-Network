@@ -369,7 +369,7 @@ def plot_boxplot(data, title):
 plot_boxplot(als_df, 'ALS Patients - Model Average Accuracies')
 
 # Plot boxplot for Healthy subjects
-plot_boxplot(healthy_df, 'Healthy Patients - Model Average Accuracies')
+plot_boxplot(healthy_df, 'Healthy Participants - Model Average Accuracies')
 
 plt.show()
 
