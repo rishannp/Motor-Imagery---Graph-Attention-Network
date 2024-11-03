@@ -409,91 +409,94 @@ models = {
     'Deep ConvNet': [64.22, 69.78, 64.98, 70.42, 69.79, 69.98, 70.47, 65.54, 67.62],
     'Shallow ConvNet': [69.43, 65.63, 67.22, 65.42, 63.14, 70.48, 70.46, 67.03, 66.28],
     'Wavelet CNN': [76.67, 72, 90.98, 73.33, 83.33, 89.9, 82.67, 80, 80.1],
-    'Ego CNN': [86.1, 98.9, 95.46, 66.31, 100, 72.59, 85.7, 98.3, 100],
     'CSP CNN': [90.26, 48.62, 90.97, 78.47, 91.32, 89.9, 94.8, 97.2, 94.1],
     'GCN 1': [63.19, 63.55, 66.97, 65.83, 62.86, 62.39, 64.87, 65.96, 63.87],
     'GCN 2': [65.53, 67.71, 67.09, 65.01, 67.73, 65.77, 63.42, 70.14, 62.54],
     'Our Work': [68.34, 71.51, 71.18, 71.67, 73.65, 73.33, 73.61, 72.88, 70.87]
 }
 
-# Function to perform F-test and return F-statistic and p-value
+# Function to perform F-test
 def f_test(var1, var2, n1, n2):
-    f_statistic = var1 / var2 if var1 > var2 else var2 / var1
-    dfn = n1 - 1  # Degrees of freedom for GAT (first sample)
-    dfd = n2 - 1  # Degrees of freedom for other model (second sample)
-    p_value = 1 - f.cdf(f_statistic, dfn, dfd)
+    # Always use 'Our Work' as the numerator for the hypothesis that its variance is smaller
+    f_statistic = var1 / var2
+    dfn, dfd = n1 - 1, n2 - 1
+    p_value = f.cdf(f_statistic, dfn, dfd)  # One-tailed test, using CDF
     return f_statistic, p_value
 
-# Get variance and sample size for each model
-model_variances = {model: np.var(accuracies, ddof=1) for model, accuracies in models.items()}
-model_samples = {model: len(accuracies) for model, accuracies in models.items()}
+# Calculate variance for each model
+model_variances = {model: np.var(acc, ddof=1) for model, acc in models.items()}
+model_samples = {model: len(acc) for model, acc in models.items()}
 
-# Set the significance level
+# Significance level
 alpha = 0.05
 
-# Perform pairwise F-tests comparing 'Our Work' to all other models
+# Perform F-tests comparing 'Our Work' to all other models
 our_var = model_variances['Our Work']
 n_our = model_samples['Our Work']
 
-for model_name, accuracies in models.items():
-    if model_name != 'Our Work':  # Compare only non-'Our Work' models
+for model_name, other_acc in models.items():
+    if model_name != 'Our Work':
         other_var = model_variances[model_name]
         n_other = model_samples[model_name]
         
-        # Perform F-test
+        # Run F-test
         f_stat, p_value = f_test(our_var, other_var, n_our, n_other)
         
         # Print results with significance check
         if p_value < alpha:
-            print(f"Variance of 'Our Work' is statistically significantly different from {model_name} (F-statistic: {f_stat}, p-value: {p_value})")
+            print(f"Variance of 'Our Work' is statistically significantly smaller than {model_name} (F-statistic: {f_stat:.4f}, p-value: {p_value:.4f})")
         else:
-            print(f"No significant difference in variance between 'Our Work' and {model_name} (F-statistic: {f_stat}, p-value: {p_value})")
+            print(f"No significant evidence that 'Our Work' variance is smaller than {model_name} (F-statistic: {f_stat:.4f}, p-value: {p_value:.4f})")
 
 #%%
 
-# Accuracy values for each model and subject (transcribed from your table)
-# Data from the image
+import numpy as np
+from scipy.stats import f
+
+# Updated accuracy values for each model and subject
 models = {
     "CSP": [51.57, 65.21, 50.64, 88.31, 82.97, 75.40, 74.76, 83.16],
     "EEGNet": [65.69, 67.06, 63.93, 66.54, 58.28, 62.58, 62.06, 61.99],
     "Deep ConvNet": [66.56, 60.12, 63.34, 66.54, 59.85, 63.83, 62.06, 63.01],
     "Shallow ConvNet": [61.82, 68.57, 58.87, 66.67, 65.31, 55.73, 65.00, 68.00],
+    'Wavelet CNN': [55.94, 53.17, 50.31, 63.85, 55.63, 52.81, 56.67, 53.00],
+    'CSP CNN': [50, 50.29, 50.32, 50.32, 50.62, 50.00, 50.00, 50.00, 50.00],
     "GCN 1": [69.37, 77.59, 66.64, 66.54, 61.31, 67.19, 65.00, 61.67],
     "GCN 2": [65.94, 63.84, 62.88, 64.80, 63.12, 65.00, 65.00, 61.67],
     "Our Work": [70.31, 77.05, 71.36, 74.19, 75.62, 75.31, 70.67, 78.00],
 }
 
-# Function to perform F-test and return F-statistic and p-value
+# Function to perform F-test
 def f_test(var1, var2, n1, n2):
-    f_statistic = var1 / var2 if var1 > var2 else var2 / var1
-    dfn = n1 - 1  # Degrees of freedom for GAT (first sample)
-    dfd = n2 - 1  # Degrees of freedom for other model (second sample)
-    p_value = 1 - f.cdf(f_statistic, dfn, dfd)
+    # Always use 'Our Work' as the numerator for the hypothesis that its variance is smaller
+    f_statistic = var1 / var2
+    dfn, dfd = n1 - 1, n2 - 1
+    p_value = f.cdf(f_statistic, dfn, dfd)  # One-tailed test, using CDF
     return f_statistic, p_value
 
-# Get variance and sample size for each model
-model_variances = {model: np.var(accuracies, ddof=1) for model, accuracies in models.items()}
-model_samples = {model: len(accuracies) for model, accuracies in models.items()}
+# Calculate variance and sample size for each model
+model_variances = {model: np.var(acc, ddof=1) for model, acc in models.items()}
+model_samples = {model: len(acc) for model, acc in models.items()}
 
-# Set the significance level
+# Significance level
 alpha = 0.05
 
 # Perform pairwise F-tests comparing 'Our Work' to all other models
 our_var = model_variances['Our Work']
 n_our = model_samples['Our Work']
 
-for model_name, accuracies in models.items():
-    if model_name != 'Our Work':  # Compare only non-'Our Work' models
+for model_name, other_acc in models.items():
+    if model_name != 'Our Work':
         other_var = model_variances[model_name]
         n_other = model_samples[model_name]
         
-        # Perform F-test
+        # Run F-test
         f_stat, p_value = f_test(our_var, other_var, n_our, n_other)
         
         # Print results with significance check
         if p_value < alpha:
-            print(f"Variance of 'Our Work' is statistically significantly different from {model_name} (F-statistic: {f_stat}, p-value: {p_value})")
+            print(f"Variance of 'Our Work' is statistically significantly smaller than {model_name} (F-statistic: {f_stat:.4f}, p-value: {p_value:.4f})")
         else:
-            print(f"No significant difference in variance between 'Our Work' and {model_name} (F-statistic: {f_stat}, p-value: {p_value})")
+            print(f"No significant evidence that 'Our Work' variance is smaller than {model_name} (F-statistic: {f_stat:.4f}, p-value: {p_value:.4f})")
 
 
