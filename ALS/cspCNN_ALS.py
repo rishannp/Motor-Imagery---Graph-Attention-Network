@@ -27,13 +27,15 @@ import pickle
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import confusion_matrix, classification_report
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Conv2D, Conv1D, BatchNormalization, MaxPool2D
-from keras.optimizers import Adam 
-import keras 
+from keras.layers import Conv3D, Conv2D, Activation, Dropout, Flatten, Dense
+from keras.optimizers import Adam
 from sklearn.metrics import accuracy_score
 from keras.callbacks import EarlyStopping
 from collections import Counter
+from mne.decoding import CSP
+from sklearn.feature_selection import mutual_info_classif
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.utils import to_categorical
 #%% Functions
 
 def split_and_extend_dataset(S1, chunk_size=256, fs=256, duration=5):
@@ -131,51 +133,43 @@ def apply_bandpass_and_select_channels(subject_data):
         for trial in range(num_trials):
             epoch_data = trials[trial][0]  # Access the data at epoch 0
             selected_channels = epoch_data[:,:]
-
-            # Apply bandpass filter to selected channels
-            filtered_channels = bandpass_filter(selected_channels)
             
             # Overwrite the entire data with only the filtered channels
-            subject_data[idx][trial][0] = filtered_channels
+            subject_data[idx][trial][0] = selected_channels
 
     return subject_data
 
-def apply_filterbank(subject_data, fs=256):
+def apply_filterbank(data, fs=256):
     """
-    Applies a filterbank with frequency bands from 4-8 Hz to 36-40 Hz across all channels
-    for each condition ('L' and 'R') in the given subject's data. Stores the output in a new
-    variable `filtered_data_output` structured as data[filterbank][idx][trial].
+    Applies a filterbank with frequency bands from 4-8 Hz to 36-40 Hz in steps of 4 Hz across all channels
+    for each trial in the given data. The output is a new array with dimensions Filterbank x Trials x Channels x Samples.
 
     Parameters:
-    - subject_data (dict): Dictionary containing data for a single subject with
-                           structure subject_data['Idx'][Trial][Epoch].
+    - data (np.ndarray): 3D array of shape (trials, channels, samples), representing EEG data.
     - fs (int): Sampling frequency (default is 256 Hz).
 
     Returns:
-    - filtered_data_output (dict): A new dictionary containing filterbank data with keys
-                                   organized as [filterbank][idx][trial].
+    - filtered_data_output (np.ndarray): 4D array of shape (Filterbank, trials, channels, samples), containing
+                                         the filtered data for each frequency band in the filterbank.
     """
-    # Define the filterbank frequency ranges
-    filterbank_ranges = [(low, low + 4) for low in range(4, 37)]  # (4-8, 5-9, ..., 36-40)
+
+    # Define the filterbank frequency ranges with non-overlapping 4 Hz bands (4-8, 8-12, ..., 36-40)
+    filterbank_ranges = [(low, low + 4) for low in range(4, 40, 4)]  # (4-8, 8-12, ..., 36-40)
     num_bands = len(filterbank_ranges)
-    
-    # Initialize the new data structure for filterbank output
-    filtered_data_output = {band_idx: {'L': [], 'R': []} for band_idx in range(num_bands)}
+    num_trials, num_channels, num_samples = data.shape
 
-    for idx in ['L', 'R']:
-        trials = subject_data[idx]  # Access trials for the current index
-        num_trials = len(trials)
-        
-        for trial in range(num_trials):
-            epoch_data = trials[trial][0]  # Access the data at epoch 0 (full trial data for all channels)
+    # Initialize the output array for filterbank data
+    # Shape: (Filterbank, trials, channels, samples)
+    filtered_data_output = np.zeros((num_bands, num_trials, num_channels, num_samples))
 
-            # For each filterbank, apply bandpass filter to all channels and store the result
-            for band_idx, (low, high) in enumerate(filterbank_ranges):
-                # Apply bandpass filter to all channels for the current frequency range
-                filtered_data = bandpass_filter(epoch_data, low, high, fs)
-                
-                # Append the filtered data for this trial and band to the corresponding entry
-                filtered_data_output[band_idx][idx].append(filtered_data)
+    # Apply each filter in the filterbank across all trials and channels
+    for band_idx, (low, high) in enumerate(filterbank_ranges):
+        for trial_idx in range(num_trials):
+            for channel_idx in range(num_channels):
+                # Apply the bandpass filter to each channel in each trial for the current frequency range
+                filtered_data_output[band_idx, trial_idx, channel_idx, :] = bandpass_filter(
+                    data[trial_idx, channel_idx, :], low, high, fs
+                )
 
     return filtered_data_output
 
@@ -231,6 +225,86 @@ def concatenate_subject_data(subject_data):
     
     # Pad all trials to the maximum length and stack along the third axis (Trials)
     return pad_trials_to_max_length(all_trials, max_length)
+
+
+def compute_csp_cnn_features(data, num_top_features=30, fs=256):
+    """
+    Computes CSP features for each filter bank, ranks and selects top spatial filters,
+    and generates the final spatio-spectral feature representation.
+
+    Parameters:
+    - data (np.ndarray): Filtered EEG data of shape (Filterbank, Trials, Channels, Samples).
+    - num_top_features (int): Number of top features to select based on mutual information (default is 30).
+    - fs (int): Sampling frequency (default is 256 Hz).
+
+    Returns:
+    - G (np.ndarray): Spatio-spectral feature representation for CNN, shape (Trials, Top_Features, Samples).
+    - labels (np.ndarray): Array of labels for each trial, with `0` for "Left" and `1` for "Right".
+    """
+    num_bands, num_trials, num_channels, num_samples = data.shape
+
+    # Create labels: first half of trials labeled as 0 (Left) and second half as 1 (Right)
+    labels = np.array([0] * (num_trials // 2) + [1] * (num_trials // 2))
+    
+    all_features = []  # List to store features from each filter band
+    spatial_filters = []  # List to store spatial filters for each filter bank
+
+    # Step 1: Compute CSP for each filter band
+    for band_idx in range(num_bands):
+        # Extract data for the current filter band
+        band_data = data[band_idx, :, :, :]  # Shape: (Trials, Channels, Samples)
+
+        # Initialize CSP
+        csp = CSP(n_components=4, reg=None, log=True)  # Choose the number of CSP components, e.g., 4
+
+        # Fit CSP on the data for this filter band
+        band_features = csp.fit_transform(band_data, labels)  # Shape: (Trials, CSP_components)
+        all_features.append(band_features)
+
+        # Store the spatial filters for the current filter band
+        spatial_filters.append(csp.filters_)  # Shape: (Channels, CSP_components)
+
+    # Concatenate features from all filter bands to create a single feature matrix
+    all_features = np.concatenate(all_features, axis=1)  # Shape: (Trials, Total_CSP_features_across_bands)
+
+    # Standardize features to zero mean and unit variance (recommended for mutual information)
+    scaler = StandardScaler()
+    all_features = scaler.fit_transform(all_features)
+
+    # Step 2: Select top features using mutual information
+    mi_scores = mutual_info_classif(all_features, labels)
+    selected_feature_indices = np.argsort(mi_scores)[-num_top_features:]  # Get indices of top features
+    top_features = all_features[:, selected_feature_indices]  # Shape: (Trials, num_top_features)
+
+    # Step 3: Generate the spatio-spectral representation G using the top spatial filters
+    G = []  # To store the spatio-spectral representation
+    for trial in range(num_trials):
+        trial_features = []
+        for idx in selected_feature_indices:
+            # Determine which filter band and CSP component this index corresponds to
+            band_idx = idx // 4  # Determine the band index
+            filter_idx = idx % 4  # CSP component index within that band
+
+            # Check that we have a valid band index and filter index
+            if band_idx < num_bands and filter_idx < spatial_filters[band_idx].shape[1]:
+                selected_filter = spatial_filters[band_idx][:, filter_idx]  # Get the filter from the correct band
+                trial_data = data[band_idx, trial, :, :]  # Shape: (Channels, Samples)
+
+                # Filter the trial data using the spatial filter
+                filtered_trial_data = np.dot(selected_filter, trial_data)  # Shape: (Samples,)
+
+                # Append the filtered signal as a feature for this trial
+                trial_features.append(filtered_trial_data)
+            else:
+                print(f"Skipping invalid index: band_idx={band_idx}, filter_idx={filter_idx}")
+
+        # Stack all features for this trial and add to the spatio-spectral representation
+        G.append(np.stack(trial_features, axis=0))  # Shape: (num_top_features, Samples)
+
+    # Convert G to a numpy array with shape (Trials, num_top_features, Samples)
+    G = np.array(G)
+
+    return G, labels
 
 def add_labels_to_data(subject_data):
     """
@@ -294,32 +368,76 @@ def process_images_and_labels(img, labels, target_size=(64, 64), n_splits=5):
 
 def build_model(input_shape, num_classes=2):
     model = Sequential()
-    model.add(Conv2D(16, (4,4), padding='same', input_shape=input_shape, kernel_initializer='he_normal'))
-    model.add(Activation('relu'))
-    model.add(MaxPool2D(pool_size=(8,8)))
-    model.add(Dropout(0.25))
     
-    model.add(Conv2D(32, (4,4), padding='same', kernel_initializer='he_normal'))
+    # Conv2D layer
+    model.add(Conv2D(50, (3, 3), padding='same', input_shape=(input_shape[0], input_shape[1], 1)))
     model.add(Activation('relu'))
-    model.add(MaxPool2D(pool_size=(2,2)))
-    model.add(Dropout(0.25))
+    model.add(Dropout(0.8))
     
+    # Another Conv2D layer
+    model.add(Conv2D(100, (3, 3), padding='same'))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.8))
+    
+    # Flatten and fully connected layers
     model.add(Flatten())
-    model.add(Dense(240, kernel_initializer='he_normal'))
-    model.add(Activation('relu'))
+    model.add(Dense(240, activation='relu'))
     model.add(Dropout(0.5))
-    model.add(Dense(num_classes, kernel_initializer='he_normal'))
-    model.add(Activation('softmax'))
+    model.add(Dense(num_classes, activation='softmax'))
     
+    # Compile the model
     model.compile(loss='categorical_crossentropy',
-                  optimizer=Adam(learning_rate=0.0003, decay=1e-6),
+                  optimizer=Adam(learning_rate=0.0001),
                   metrics=['accuracy'])
     return model
+
+def calculate_nscm(data):
+    """
+    Calculate the Normalized Sample Covariance Matrix (NSCM) for given EEG trials.
+    
+    Parameters:
+        data (np.ndarray): 3D array of shape (trials, electrodes, samples) representing filtered EEG signals.
+    
+    Returns:
+        G (np.ndarray): 3D array of shape (electrodes, electrodes, trials) representing the NSCM matrices for each trial.
+    """
+    trials, electrodes, samples = data.shape  # Unpack the shape
+    G = np.zeros((electrodes, electrodes, trials))  # Initialize the 3D array for NSCMs
+
+    # Calculate the NSCM for each trial
+    for trial in range(trials):
+        Zq = data[trial]  # Get the EEG data for the current trial
+        
+        # Calculate the mean for each electrode
+        Z_bar = np.mean(Zq, axis=1)  # Mean across samples (shape: (electrodes,))
+        
+        # Compute the NSCM matrix for the current trial
+        M = np.zeros((electrodes, electrodes))  # Initialize the NSCM matrix
+        
+        for e in range(electrodes):
+            for t in range(electrodes):
+                Zeq = Zq[e, :]  # Data for electrode e
+                Zt = Zq[t, :]   # Data for electrode t
+                
+                Zeq_diff = Zeq - Z_bar[e]  # Difference from the mean for electrode e
+                Zt_diff = Zt - Z_bar[t]     # Difference from the mean for electrode t
+                
+                # Calculate the normalized covariance
+                numerator = np.sum(Zeq_diff * Zt_diff)
+                denominator = np.sqrt(np.sum(Zeq_diff**2) * np.sum(Zt_diff**2))
+                
+                # Fill the NSCM matrix with the normalized covariance
+                M[e, t] = numerator / denominator if denominator != 0 else 0  # Handle division by zero
+        
+        G[:, :, trial] = M  # Store the NSCM matrix for this trial
+    
+    return G
+
 #%% Main
 data_dir = r'C:\Users\uceerjp\Desktop\PhD\Penn State Data\Work\Data\OG_Full_Data'
 
 # Define the subject numbers
-subject_numbers = [1, 2, 5, 9, 21, 31, 34, 39]
+subject_numbers = [1 ,2, 5, 9, 21, 31, 34, 39]  # 
 
 # Dictionary to hold the loaded data for each subject
 subject_accuracies = {}
@@ -330,13 +448,19 @@ for subject_number in subject_numbers:
     mat_contents = sio.loadmat(mat_fname)
     data = mat_contents[f'Subject{subject_number}']
     data = split_and_extend_dataset(data, chunk_size=256*5, fs=256, duration=5)
-    #data = apply_filterbank(data, fs=256)
     data = apply_bandpass_and_select_channels(data)
     data = concatenate_subject_data(data) 
-    data = np.reshape(data,(300,22,1280)) #Output needs to be : Trials, Channels, Timesteps
+    data = np.reshape(data,(data.shape[2],22,1280)) #Output needs to be : Trials, Channels, Timesteps
+    data = apply_filterbank(data, fs=256)
+    features , labels = compute_csp_cnn_features(data, num_top_features=22, fs=256)
+    features = calculate_nscm(features)
+    features = np.reshape(features,(features.shape[2],features.shape[0],features.shape[0])) #Output needs to be : Trials, Channels, Timesteps
+    del data
     
+    X = features
+    Y = labels
+    Y = to_categorical(Y, num_classes=2)
     
-    #%%
     # Cross-validation setup
     input_shape = X.shape[1:]  # Input shape based on processed images
     skf = StratifiedKFold(n_splits=10)
@@ -382,6 +506,8 @@ for subject_number in subject_numbers:
         print(confusion_matrix(y_true, y_pred))
         print(classification_report(y_true, y_pred))
     
+        
+    del features, X, Y
     # Calculate mean, max, and min accuracies for the subject
     mean_accuracy = np.mean(fold_accuracies)
     max_accuracy = np.max(fold_accuracies)
