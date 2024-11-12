@@ -9,8 +9,8 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 - ShallowConvNet (Originally from Schirrmeister)
 - WaveletCNN (D.Zhang - 10.1109/ACCESS.2018.2889093)
 - CSPCNN (J.Bang - https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9325918)
-- GCN
-- GCN 
+- GCN 1
+- GCN 2
 - GAT 
 
 ## Results
@@ -18,4 +18,4 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 
 ## To Be Done:
 - Publish ALS Dataset for open access and reproducibility
-
+- CSP GAT : CSP Filter before converting into a graph. 
