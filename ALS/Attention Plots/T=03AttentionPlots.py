@@ -179,7 +179,7 @@ def bandpowercalc(l,band,fs):
 data_dir = r'C:\Users\uceerjp\Desktop\PhD\Penn State Data\Work\Data\OG_Full_Data'
 
 # Define the subject numbers
-subject_numbers = [1, 2, 5, 9, 21, 31, 34, 39]
+subject_numbers = [9]
 #subject_numbers = [21, 31, 34, 39]
 
 # Dictionary to hold the loaded data for each subject
@@ -417,34 +417,41 @@ for subject_number in subject_numbers:
             model.last_attention_weights = None  # Clear stored attention weights after using them
             return correct / len(loader.dataset), attention_weights
         
+        
         # Function to plot dual heatmaps for training and testing attention scores
-        def plot_dual_attention_heatmaps(train_attention, test_attention, electrode_labels, subject_number, fold):
-            fig, axes = plt.subplots(1, 2, figsize=(16, 8))  # Create a figure with two subplots
+        def plot_dual_attention_heatmaps(train_attention, test_attention, electrode_labels, subject_number, fold, dpi=300):
+            fig, axes = plt.subplots(1, 2, figsize=(16, 8), dpi=dpi)  # Set dpi for higher resolution
+            
+            # Font size settings
+            title_fontsize = 18
+            label_fontsize = 14
+            tick_fontsize = 12
         
             # Plot for training attention scores
-            axes[0].imshow(train_attention, cmap="Blues", aspect='auto')
-            axes[0].set_title(f'Subject {subject_number} Fold {fold+1} - Training Attention')
+            im_train = axes[0].imshow(train_attention, cmap="Blues", aspect='auto')
+            axes[0].set_title(f'Subject {subject_number} Fold {fold+1} - Training Attention', fontsize=title_fontsize)
             axes[0].set_xticks(np.arange(len(electrode_labels)))
             axes[0].set_yticks(np.arange(len(electrode_labels)))
-            axes[0].set_xticklabels(electrode_labels)
-            axes[0].set_yticklabels(electrode_labels)
-            axes[0].set_xlabel("Electrodes")
-            axes[0].set_ylabel("Electrodes")
-            axes[0].colorbar = plt.colorbar(axes[0].imshow(train_attention, cmap="Blues", aspect='auto'), ax=axes[0])
+            axes[0].set_xticklabels(electrode_labels, fontsize=tick_fontsize)
+            axes[0].set_yticklabels(electrode_labels, fontsize=tick_fontsize)
+            axes[0].set_xlabel("Electrodes", fontsize=label_fontsize)
+            axes[0].set_ylabel("Electrodes", fontsize=label_fontsize)
+            plt.colorbar(im_train, ax=axes[0])
         
             # Plot for testing attention scores
-            axes[1].imshow(test_attention, cmap="Blues", aspect='auto')
-            axes[1].set_title(f'Subject {subject_number} Fold {fold+1} - Testing Attention')
+            im_test = axes[1].imshow(test_attention, cmap="Blues", aspect='auto')
+            axes[1].set_title(f'Subject {subject_number} Fold {fold+1} - Testing Attention', fontsize=title_fontsize)
             axes[1].set_xticks(np.arange(len(electrode_labels)))
             axes[1].set_yticks(np.arange(len(electrode_labels)))
-            axes[1].set_xticklabels(electrode_labels)
-            axes[1].set_yticklabels(electrode_labels)
-            axes[1].set_xlabel("Electrodes")
-            axes[1].set_ylabel("Electrodes")
-            axes[1].colorbar = plt.colorbar(axes[1].imshow(test_attention, cmap="Blues", aspect='auto'), ax=axes[1])
+            axes[1].set_xticklabels(electrode_labels, fontsize=tick_fontsize)
+            axes[1].set_yticklabels(electrode_labels, fontsize=tick_fontsize)
+            axes[1].set_xlabel("Electrodes", fontsize=label_fontsize)
+            axes[1].set_ylabel("Electrodes", fontsize=label_fontsize)
+            plt.colorbar(im_test, ax=axes[1])
         
             plt.tight_layout()
             plt.show()
+
             
             
         optimal = [0, 0, 0]

@@ -374,24 +374,24 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Plotting function for boxplots
-def plot_boxplot(data, title):
+def plot_boxplot(data, title, dpi=300):  # Added dpi parameter with a default of 300
     sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(5, 6))
+    plt.figure(figsize=(5, 6), dpi=dpi)  # Set the dpi for higher resolution
     sns.boxplot(x="Model", y="Mean", data=data, palette="pastel")  # Using pastel palette
     plt.axhline(70, color='red', linestyle='--', label="70% Threshold")  # 70% threshold line
     plt.xticks(rotation=45, ha='right', fontsize=12)
     plt.yticks(fontsize=12)
     plt.xlabel("Models", fontsize=14)
-    plt.ylabel("Accuracy", fontsize=14)
+    plt.ylabel("Accuracy (%)", fontsize=14)
     plt.title(title, fontsize=16)
     plt.legend(loc='upper right', fontsize=12)
     plt.tight_layout()
 
 # Plot boxplot for ALS subjects
-plot_boxplot(als_df, 'ALS Patients - Model Average Accuracies')
+plot_boxplot(als_df, 'ALS Patients - Model Average Accuracies', dpi=300)
 
 # Plot boxplot for Healthy subjects
-plot_boxplot(healthy_df, 'Healthy Participants - Model Average Accuracies')
+plot_boxplot(healthy_df, 'Healthy Participants - Model Average Accuracies', dpi=300)
 
 plt.show()
 
