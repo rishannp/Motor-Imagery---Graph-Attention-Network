@@ -17,5 +17,4 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 
 
 ## To Be Done:
-- Publish ALS Dataset for open access and reproducibility
-- CSP GAT : CSP Filter before converting into a graph. 
+- Publish ALS Dataset for open access and reproducibility : To be published Feb, on UCL FigShare. DOI to be shared. 
