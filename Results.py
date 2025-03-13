@@ -395,6 +395,47 @@ plot_boxplot(healthy_df, 'Healthy Participants - Model Average Accuracies', dpi=
 
 plt.show()
 
+#%%
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Plotting function for boxplots with a black background, white text, and rotated x-axis labels.
+def plot_boxplot(data, title, dpi=300):
+    # Create figure and axis with explicit black backgrounds.
+    fig, ax = plt.subplots(figsize=(5, 6), dpi=dpi)
+    fig.patch.set_facecolor("black")
+    ax.set_facecolor("black")
+    
+    # Plot boxplot on the given axis using seaborn.
+    sns.boxplot(x="Model", y="Mean", data=data, palette="pastel", ax=ax)
+    ax.axhline(70, color='red', linestyle='--', label="70% Threshold")
+    
+    # Set the tick parameters and labels to white.
+    ax.tick_params(axis='x', colors='white', labelsize=12)
+    ax.tick_params(axis='y', colors='white', labelsize=12)
+    ax.set_xlabel("Models", fontsize=14, color="white")
+    ax.set_ylabel("Accuracy (%)", fontsize=14, color="white")
+    ax.set_title(title, fontsize=16, color="white")
+    
+    # Rotate x-axis labels by 90 degrees.
+    plt.setp(ax.get_xticklabels(), rotation=90)
+    
+    # Update legend text colors to white.
+    legend = ax.legend(loc='upper right', fontsize=12)
+    for text in legend.get_texts():
+        text.set_color("white")
+    
+    plt.tight_layout()
+    plt.show()
+
+# Example usage:
+# Plot boxplot for ALS subjects
+plot_boxplot(als_df, 'ALS Patients - Model Average Accuracies', dpi=300)
+
+# Plot boxplot for Healthy subjects
+plot_boxplot(healthy_df, 'Healthy Participants - Model Average Accuracies', dpi=300)
+
 #%% F-Test Healthy
 
 import numpy as np
