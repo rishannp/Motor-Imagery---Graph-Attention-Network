@@ -13,8 +13,8 @@ Accurately classifying EEG signals, especially for individuals with neurodegener
 - GCN 2
 - GAT 
 
-## Results
-
-
+## Dataset
+ALS dataset can be found and downloaded here: 
+Patel, Rishan; Jiang, Dai; Bryson, Barney; Carlson, Tom; Demosthenous, Andreas; Geronimo, Andrew (2025). Longitudinal ALS EEG Dataset for Motor Imagery Studies. University College London. Dataset. https://doi.org/10.5522/04/28156016.v1
 ## To Be Done:
-- Publish ALS Dataset for open access and reproducibility : To be published Feb, on UCL FigShare. DOI to be shared. 
+
